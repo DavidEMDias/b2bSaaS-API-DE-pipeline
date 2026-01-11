@@ -1,0 +1,106 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_CONN_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES_CONN_PASSWORD}
+      #POSTGRES_DB: ${POSTGRES_DB} # POSTGRES_CONN_USERNAME set to the default postgres user to not create another db. Initial database will be postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Named volume for database storage
+      - ./docker/postgres:/docker-entrypoint-initdb.d # Initialization scripts
+    # # Test connection to 1 of 3 dbs, the metadata db in this case
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_CONN_USERNAME} -d ${METADATA_DATABASE_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  mock-api:
+    build: ./mock_api
+    container_name: mock-api
+    environment:
+      API_KEY: ${API_KEY:?API_KEY must be set}
+      API_RATE_LIMIT_PER_MIN: ${API_RATE_LIMIT_PER_MIN:-300}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow:
+    build: ./airflow
+    # image: airflow-local # Compose will always build the image inside ./airflow - if image: airflow-local docker tries to pull it from docker hub.
+    container_name: airflow
+    working_dir: /workspace
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+      AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: 'False'
+
+      # Key for encrypting data
+      AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
+      # Use SQLAlchemy to connect to Airflow's metadata Postgres database using the psycopg2 driver
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://${METADATA_DATABASE_USERNAME}:${METADATA_DATABASE_PASSWORD}@postgres:5432/${METADATA_DATABASE_NAME}
+      
+      # DBT_PROFILES_DIR: /opt/airflow/.dbt
+      TZ: ${TZ:-UTC}
+
+      # Connection to an external PostgreSQL database needed to store the data from the ELT process
+      AIRFLOW_CONN_POSTGRES_DEFAULT: >-
+        postgresql+psycopg2://${ELT_DATABASE_USERNAME}:${ELT_DATABASE_PASSWORD}@postgres:5432/${ELT_DATABASE_NAME}
+      API_BASE_URL: http://mock-api:8000
+      API_KEY: ${API_KEY:?API_KEY must be set}
+      POSTGRES_USER: ${ELT_DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${ELT_DATABASE_PASSWORD}
+      POSTGRES_DB: ${ELT_DATABASE_NAME}
+    entrypoint: ["/bin/bash"]
+    command:
+      - -lc
+      - |
+          set -euo pipefail
+
+          airflow db init
+          airflow users create --role Admin --username admin --password admin --firstname Admin --lastname User --email admin@example.com || true
+          airflow connections delete postgres_default || true
+
+          airflow connections add postgres_default \
+              --conn-type postgres \
+              --conn-host postgres \
+              --conn-login "${ELT_DATABASE_USERNAME}" \
+              --conn-password "${ELT_DATABASE_PASSWORD}" \
+              --conn-schema "${ELT_DATABASE_NAME}" \
+              --conn-port 5432
+              
+          airflow webserver &
+          exec airflow scheduler
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./dbt:/usr/app
+      - ./dbt/profiles:/opt/airflow/.dbt
+      - ./:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-api:
+        condition: service_healthy
+
+volumes:
+  pgdata: {}
