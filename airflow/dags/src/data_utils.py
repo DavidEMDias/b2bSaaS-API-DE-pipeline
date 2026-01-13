@@ -35,6 +35,14 @@ import logging
 
 DB_NAME = os.environ.get("ELT_DATABASE_NAME")
 
+def table_exists(cur, schema, table):
+    cur.execute(
+        "SELECT to_regclass(%s);", # Verifies a objet (tabela, view, índice, etc. SELECT to_regclass('raw.customers');
+        (f"{schema}.{table}",)
+    )
+    return cur.fetchone()[0] is not None
+
+
 def create_elt_schemas():
     try:
         # Create hook for the already existing connection in airflow
@@ -49,61 +57,69 @@ def create_elt_schemas():
                     cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema};")
                     logging.info(f"Schema '{schema}' ensured.")
 
+                if table_exists(cur, "raw", "customers"):
+                    logging.info("Table 'raw.customers' already exists.")
+                else:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS raw.customers (
+                            customer_id UUID PRIMARY KEY,
+                            company_name TEXT,
+                            country TEXT,
+                            industry TEXT,
+                            company_size TEXT,
+                            signup_date TIMESTAMPTZ,
+                            updated_at TIMESTAMPTZ,
+                            is_churned BOOLEAN,
+                            last_seen_at TIMESTAMPTZ,
+                            is_deleted BOOLEAN DEFAULT FALSE
+                        );
+                    """)
+                    logging.info("Table 'raw.customers' ensured.")
 
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS raw.customers (
-                        customer_id UUID PRIMARY KEY,
-                        company_name TEXT,
-                        country TEXT,
-                        industry TEXT,
-                        company_size TEXT,
-                        signup_date TIMESTAMPTZ,
-                        updated_at TIMESTAMPTZ,
-                        is_churned BOOLEAN
-                    );
-                """)
-                logging.info("Table 'raw.customers' ensured.")
+                if table_exists(cur, "raw", "payments"):
+                    logging.info("Table 'raw.payments' already exists.")
+                else:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS raw.payments (
+                            payment_id UUID PRIMARY KEY,
+                            customer_id UUID,
+                            product TEXT,
+                            amount NUMERIC,
+                            currency TEXT,
+                            status TEXT,
+                            refunded_amount NUMERIC,
+                            fee NUMERIC,
+                            payment_method TEXT,
+                            country TEXT,
+                            created_at TIMESTAMPTZ,
+                            updated_at TIMESTAMPTZ
+                        );
+                    """)
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_raw_payments_created ON raw.payments(created_at);")
+                    logging.info("Table 'raw.payments' and index ensured.")
 
-
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS raw.payments (
-                        payment_id UUID PRIMARY KEY,
-                        customer_id UUID,
-                        product TEXT,
-                        amount NUMERIC,
-                        currency TEXT,
-                        status TEXT,
-                        refunded_amount NUMERIC,
-                        fee NUMERIC,
-                        payment_method TEXT,
-                        country TEXT,
-                        created_at TIMESTAMPTZ,
-                        updated_at TIMESTAMPTZ
-                    );
-                """)
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_raw_payments_created ON raw.payments(created_at);")
-                logging.info("Table 'raw.payments' and index ensured.")
-
-
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS raw.sessions (
-                        session_id UUID PRIMARY KEY,
-                        customer_id UUID,
-                        source TEXT,
-                        medium TEXT,
-                        campaign TEXT,
-                        device TEXT,
-                        country TEXT,
-                        pageviews INT,
-                        session_duration_s INT,
-                        bounced INT,
-                        converted INT,
-                        session_start TIMESTAMPTZ,
-                        updated_at TIMESTAMPTZ
-                    );
-                """)
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_raw_sessions_start ON raw.sessions(session_start);")
-                logging.info("Table 'raw.sessions' and index ensured.")
+                if table_exists(cur, "raw", "sessions"):
+                    logging.info("Table 'raw.sessions' already exists.")
+                else:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS raw.sessions (
+                            session_id UUID PRIMARY KEY,
+                            customer_id UUID,
+                            source TEXT,
+                            medium TEXT,
+                            campaign TEXT,
+                            device TEXT,
+                            country TEXT,
+                            pageviews INT,
+                            session_duration_s INT,
+                            bounced INT,
+                            converted INT,
+                            session_start TIMESTAMPTZ,
+                            updated_at TIMESTAMPTZ
+                        );
+                    """)
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_raw_sessions_start ON raw.sessions(session_start);")
+                    logging.info("Table 'raw.sessions' and index ensured.")
                 
             conn.commit()
             logging.info("All schemas and raw tables created successfully.")
