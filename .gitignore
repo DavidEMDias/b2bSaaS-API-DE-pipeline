@@ -1,5 +1,10 @@
 .env
-venv
+.venv
 airflow/logs/
 __pycache__/
 *.pyc
+dbt/logs
+
+# Keys
+keys/gcp-key.json
+dbt/keys/gcp-key.json

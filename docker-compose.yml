@@ -70,6 +70,7 @@ services:
       POSTGRES_USER: ${ELT_DATABASE_USERNAME}
       POSTGRES_PASSWORD: ${ELT_DATABASE_PASSWORD}
       POSTGRES_DB: ${ELT_DATABASE_NAME}
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/secrets/gcp-key.json
     entrypoint: ["/bin/bash"]
     command:
       - -lc
@@ -100,6 +101,7 @@ services:
       - ./dbt/profiles:/opt/airflow/.dbt
       - ./:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./keys/gcp-key.json:/opt/airflow/secrets/gcp-key.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -109,7 +111,7 @@ services:
 
   dbt:
     image: ghcr.io/dbt-labs/dbt-postgres:1.8.latest
-    container_name: dbt_ecommerce
+    container_name: dbt_saas
     working_dir: /usr/app
     environment:
       DBT_PROFILES_DIR: /root/.dbt

@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: stg_sessions
+    description: "Cleaned sessions table with incremental merge from raw_saas.sessions"
+    config:
+      materialized: incremental
+      unique_key: session_id
+      incremental_strategy: merge
+      merge_update_columns:
+        - customer_id
+        - source
+        - medium
+        - campaign
+        - device
+        - country
+        - pageviews
+        - session_duration_s
+        - bounced
+        - converted
+        - session_start
+        - updated_at
+        - session_day
+      schema: staging
+      tags: ['staging', 'cleaned','sessions']

@@ -9,7 +9,7 @@ API_KEY = os.getenv("API_KEY")
 url = "http://localhost:8000/customers"
 
 payload = {
-    "company_name": "Awesome Co",
+    "company_name": "Awesom232132saddasd1e Co",
     "country": "US",
     "industry": "SaaS",
     "company_size": "11-50",

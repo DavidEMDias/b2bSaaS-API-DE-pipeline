@@ -1,9 +1,14 @@
+import os
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from src.helpers import extract_and_ingest_table
-from src.data_utils import create_elt_schemas
+from custom_functions.helpers import extract_and_ingest_table
+from custom_functions.db.db_objects_utils import create_elt_schemas
+from custom_functions.upload_to_bucket import extract_and_upload_table
+
+GCS_BUCKET = os.environ["BRONZE_GCS_BUCKET_NAME"]
+
 
 DEFAULT_ARGS = {
     'owner': 'data_eng',
@@ -28,38 +33,75 @@ with DAG(
         python_callable=create_elt_schemas
         )
 
-    extract_customers = PythonOperator(
-        task_id="extract_customers",
-        python_callable=extract_and_ingest_table,
-        op_kwargs={
-            "table": "raw.customers",
-            "endpoint": "customers",
-            "ts_field": "updated_at",
-            "wm_name": "wm_customers",
-        },
+    # extract_customers = PythonOperator(
+    #     task_id="extract_customers",
+    #     python_callable=extract_and_ingest_table,
+    #     op_kwargs={
+    #         "table": "raw.customers",
+    #         "endpoint": "customers",
+    #         "ts_field": "updated_at",
+    #         "wm_name": "wm_customers",
+    #     },
+    # )
+
+    # extract_payments = PythonOperator(
+    #     task_id="extract_payments",
+    #     python_callable=extract_and_ingest_table,
+    #     op_kwargs={
+    #         "table": "raw.payments",
+    #         "endpoint": "payments",
+    #         "ts_field": "updated_at",
+    #         "wm_name": "wm_payments",
+    #     },
+    # )
+
+    # extract_sessions = PythonOperator(
+    #     task_id="extract_sessions",
+    #     python_callable=extract_and_ingest_table,
+    #     op_kwargs={
+    #         "table": "raw.sessions",
+    #         "endpoint": "sessions",
+    #         "ts_field": "updated_at",
+    #         "wm_name": "wm_sessions",
+    #     },
+    # )
+
+
+    uploadCustomers = PythonOperator(
+    task_id="extract_and_upload_customers",
+    python_callable=extract_and_upload_table,
+    op_kwargs={
+        "endpoint":"customers",
+        "ts_field":"updated_at",
+        "wm_name":"wm_customers",
+        "bucket_name":GCS_BUCKET,
+        "gcs_prefix":"raw",
+    },
     )
 
-    extract_payments = PythonOperator(
-        task_id="extract_payments",
-        python_callable=extract_and_ingest_table,
-        op_kwargs={
-            "table": "raw.payments",
-            "endpoint": "payments",
-            "ts_field": "updated_at",
-            "wm_name": "wm_payments",
-        },
+    uploadPayments = PythonOperator(
+    task_id="extract_and_upload_payments",
+    python_callable=extract_and_upload_table,
+    op_kwargs={
+        "endpoint":"payments",
+        "ts_field":"updated_at",
+        "wm_name":"wm_payments",
+        "bucket_name":GCS_BUCKET,
+        "gcs_prefix":"raw",
+    },
     )
 
-    extract_sessions = PythonOperator(
-        task_id="extract_sessions",
-        python_callable=extract_and_ingest_table,
-        op_kwargs={
-            "table": "raw.sessions",
-            "endpoint": "sessions",
-            "ts_field": "updated_at",
-            "wm_name": "wm_sessions",
-        },
+    uploadSessions = PythonOperator(
+    task_id="extract_and_upload_sessions",
+    python_callable=extract_and_upload_table,
+    op_kwargs={
+        "endpoint":"sessions",
+        "ts_field":"updated_at",
+        "wm_name":"wm_sessions",
+        "bucket_name":GCS_BUCKET,
+        "gcs_prefix":"raw",
+    },
     )
 
 # Run all in parallel
-create_objects >> [extract_customers, extract_payments, extract_sessions]
+create_objects >> [uploadCustomers, uploadPayments, uploadSessions]

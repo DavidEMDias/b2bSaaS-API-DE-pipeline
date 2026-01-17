@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Cleaned customers table with incremental merge from raw_saas.customers"
+    config:
+      materialized: incremental
+      unique_key: customer_id
+      incremental_strategy: merge
+      merge_update_columns:
+        - company_name
+        - country
+        - industry
+        - company_size
+        - signup_date
+        - updated_at
+        - is_churned
+        - signup_month
+      schema: staging
+      tags: ['staging', 'cleaned','customers']

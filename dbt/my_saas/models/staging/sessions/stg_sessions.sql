@@ -17,3 +17,7 @@ select
   updated_at::timestamp as updated_at,
   date_trunc('day', session_start)::date as session_day
 from source
+{% if is_incremental() %}
+    -- only pull rows updated since the last run
+    where updated_at > (select max(updated_at) from {{ this }})
+{% endif %}

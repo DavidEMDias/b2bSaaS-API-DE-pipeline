@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: stg_payments
+    description: "Cleaned payments table with incremental merge from raw_saas.payments"
+    config:
+      materialized: incremental
+      unique_key: payment_id
+      incremental_strategy: merge
+      merge_update_columns:
+        - customer_id
+        - product
+        - amount
+        - currency
+        - status
+        - refunded_amount
+        - fee
+        - payment_method
+        - country
+        - created_at
+        - updated_at
+        - net_revenue
+        - order_day
+      schema: staging
+      tags: ['staging', 'cleaned','payments']

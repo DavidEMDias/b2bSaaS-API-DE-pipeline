@@ -20,3 +20,7 @@ select
   (amount - coalesce(fee,0) - coalesce(refunded_amount,0))::numeric as net_revenue,
   date_trunc('day', created_at)::date as order_day
 from source
+{% if is_incremental() %}
+    -- only pull rows updated since the last run
+    where updated_at > (select max(updated_at) from {{ this }})
+{% endif %}
